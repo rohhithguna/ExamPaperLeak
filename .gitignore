@@ -1,19 +1,19 @@
-# Environment secrets — never commit
+Environment secrets — never commit
+
 .env
 
-# SQLite database — contains all user and exam data
-platform.db
-platform.db-shm
-platform.db-wal
+Encrypted paper artifacts — sensitive generated files
 
-# Encrypted paper artifacts — sensitive generated files
 storage/*.enc
 
-# Node dependencies
+Node dependencies
+
 node_modules/
 
-# TypeScript build output
+TypeScript build output
+
 dist/
 
-# macOS metadata
+macOS metadata
+
 .DS_Store

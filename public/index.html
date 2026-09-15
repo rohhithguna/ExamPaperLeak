@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <title>Secure Exam Platform</title>
     <style>
         :root {
@@ -11,9 +14,13 @@
             --border-color: #ccc;
             --primary: #000;
             --primary-hover: #333;
+            --font-heading: 'IBM Plex Sans', Arial, sans-serif;
+            --font-body: 'Inter', Arial, sans-serif;
+            --font-tech: 'JetBrains Mono', monospace;
         }
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: var(--font-body);
+            font-weight: 400;
             background-color: var(--bg-color);
             color: var(--text-color);
             margin: 0;
@@ -29,7 +36,8 @@
             border: 1px solid var(--border-color);
             box-shadow: 0 4px 6px rgba(0,0,0,0.05);
         }
-        h1, h2, h3 { font-weight: 600; margin-top: 0; }
+        h1, h2, h3, h4, h5 { font-family: var(--font-heading); font-weight: 600; margin-top: 0; }
+        h1 { font-weight: 700; }
         .hidden { display: none !important; }
         input, select, button, textarea {
             width: 100%;
@@ -37,13 +45,15 @@
             margin-bottom: 15px;
             border: 1px solid var(--border-color);
             box-sizing: border-box;
-            font-family: inherit;
+            font-family: var(--font-body);
+            font-weight: 400;
         }
         button {
             background: var(--primary);
             color: #fff;
             border: none;
             cursor: pointer;
+            font-family: var(--font-body);
             font-weight: 500;
         }
         button:hover { background: var(--primary-hover); }
@@ -60,6 +70,9 @@
             align-items: center;
         }
         
+        
+        label { font-family: var(--font-body); font-weight: 500; display: inline-block; margin-bottom: 5px; }
+        .tech-val { font-family: var(--font-tech); font-weight: 400; font-size: 0.9em; background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }
         .badge {
             font-size: 0.8em;
             padding: 3px 6px;
