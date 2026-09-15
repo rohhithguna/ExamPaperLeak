@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Exam Platform</title>
+    <style>
+        :root {
+            --bg-color: #fcfcfc;
+            --text-color: #111;
+            --border-color: #ccc;
+            --primary: #000;
+            --primary-hover: #333;
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: #fff;
+            padding: 30px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        h1, h2, h3 { font-weight: 600; margin-top: 0; }
+        .hidden { display: none !important; }
+        input, select, button, textarea {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid var(--border-color);
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+        button {
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        button:hover { background: var(--primary-hover); }
+        .nav { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+        .nav button { width: auto; background: none; color: var(--text-color); border: 1px solid var(--border-color); }
+        .nav button:hover { background: #eee; }
+        
+        .list-item {
+            border: 1px solid var(--border-color);
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .badge {
+            font-size: 0.8em;
+            padding: 3px 6px;
+            background: #eee;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="authView">
+        <h1 style="text-align: center; margin-bottom: 5px;">SECURE MANAGEMENT OF</h1>
+        <h2 style="text-align: center; margin-top: 0; color: #555;">COMPETITIVE EXAMINATION QUESTION PAPERS</h2>
+        
+        <div style="background: #f9f9f9; padding: 20px; border-left: 4px solid var(--primary); margin-bottom: 20px;">
+            <p style="margin-top: 0;">This platform securely manages the entire lifecycle of high-stakes examination generation, including:</p>
+            <ul style="margin-bottom: 0;">
+                <li>Examination requests and configuration</li>
+                <li>Question setter contributions and isolation</li>
+                <li>Candidate question redundancy pools</li>
+                <li>Secure CSPRNG final question selection</li>
+                <li>AES-256-GCM encrypted question-paper delivery</li>
+            </ul>
+        </div>
+
+        <div style="display: flex; gap: 20px;">
+            <div style="flex: 1;">
+                <div id="loginForm">
+                    <h3>System Login</h3>
+                    <div style="font-size: 0.9em; margin-bottom: 15px; color: #666;">Select your role to continue: ADMIN, ORGANIZATION, or SETTER.</div>
+                    <input type="email" id="loginEmail" placeholder="Email">
+                    <input type="password" id="loginPassword" placeholder="Password">
+                    <button onclick="login()">Login</button>
+                    <p>Don't have an account? <a href="#" onclick="toggleAuthForm()">Register here</a></p>
+                </div>
+                
+                <div id="registerForm" class="hidden">
+                    <h3>Register</h3>
+                    <input type="text" id="regName" placeholder="Full Name">
+                    <input type="email" id="regEmail" placeholder="Email">
+                    <input type="password" id="regPassword" placeholder="Password">
+                    <input type="text" id="regExpertise" placeholder="Expertise / Subject Domain">
+                    <select id="regRole">
+                        <option value="SETTER">Question Setter</option>
+                        <option value="ORG">Organization</option>
+                    </select>
+                    <button onclick="register()">Register</button>
+                    <p>Already have an account? <a href="#" onclick="toggleAuthForm()">Login here</a></p>
+                </div>
+                <p id="authMessage" style="color: red;"></p>
+            </div>
+
+            <div style="flex: 1; border: 1px solid var(--border-color); padding: 15px; background: #fffaf0; font-size: 0.85em;">
+                <h3 style="margin-top: 0;">DEMO LOGIN CREDENTIALS</h3>
+                <p style="color: #666; font-style: italic; margin-top: -10px;">For Project Demonstration Only</p>
+                
+                <strong>Admin:</strong><br>
+                admin@gmail.com<br><br>
+                
+                <strong>Organization:</strong><br>
+                organization@gmail.com<br><br>
+                
+                <strong>Setters:</strong><br>
+                setter1@gmail.com<br>
+                setter2@gmail.com<br>
+                setter3@gmail.com<br>
+                setter4@gmail.com<br>
+                setter5@gmail.com<br><br>
+                
+                <strong>Demo Password:</strong><br>
+                demo_password_2026
+            </div>
+        </div>
+    </div>
+
+    <div id="appView" class="hidden">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h1 id="welcomeUser">Welcome</h1>
+            <button onclick="logout()" style="width: auto; background: none; color: #000; border: 1px solid #000;">Logout</button>
+        </div>
+        
+
+        <div id="adminDashboard" class="hidden">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h2>Admin Dashboard</h2>
+                <div>
+                    <button style="width:auto;" onclick="loadSetters(); loadAdminExams();">Refresh Dashboard</button>
+                </div>
+            </div>
+            
+            <h3>Examination Requests</h3>
+            <div id="adminExamList"></div>
+
+            <h3 style="margin-top:30px;">Pending Setters</h3>
+            <div id="setterList"></div>
+        </div>
+
+
+        <div id="orgDashboard" class="hidden">
+            <h2>Organization Dashboard</h2>
+            
+            <div id="orgExamListView">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3>My Examinations</h3>
+                    <div>
+                        <button style="width:auto;" onclick="showCreateExamForm()">Create Examination</button>
+                        <button style="width:auto; background:#fff; color:#000; border:1px solid #ccc;" onclick="loadExams()">Refresh List</button>
+                    </div>
+                </div>
+                <div id="examList"></div>
+            </div>
+
+            <div id="orgCreateExamView" class="hidden">
+                <h3>Create Examination</h3>
+                <input type="text" id="examName" placeholder="Examination Name (e.g. Government Exam 2026)">
+                <input type="text" id="examSubject" placeholder="Subject">
+                <textarea id="examDesc" placeholder="Description (Optional)"></textarea>
+                
+                <label>Required Final Questions</label>
+                <input type="number" id="reqQuestions" placeholder="100" oninput="updatePreview()">
+                
+                <label>Security Multiplier</label>
+                <select id="multiplier" onchange="updatePreview()">
+                    <option value="1.5">1.5×</option>
+                    <option value="2">2.0×</option>
+                    <option value="3">3.0×</option>
+                    <option value="5">5.0×</option>
+                    <option value="custom">Custom...</option>
+                </select>
+                <input type="number" id="customMultiplier" placeholder="Custom Multiplier" class="hidden" step="0.1" min="1.5" oninput="updatePreview()">
+                
+                <label>Questions per Setter</label>
+                <input type="number" id="qPerSetter" value="3" oninput="updatePreview()">
+
+                <div style="background: #e8f4f8; padding: 15px; margin: 15px 0; border: 1px solid #b3d4fc;">
+                    <strong>Blueprint (Optional)</strong><br>
+                    <small>Specify how many of the final questions should be of each difficulty. Must sum up to Required Final Questions if used.</small><br><br>
+                    <input type="number" id="bEasy" placeholder="Easy count" style="width: 30%">
+                    <input type="number" id="bMedium" placeholder="Medium count" style="width: 30%">
+                    <input type="number" id="bHard" placeholder="Hard count" style="width: 30%">
+                </div>
+
+                <label>Release Time (Optional)</label>
+                <input type="datetime-local" id="releaseAt" oninput="updatePreview()">
+                
+                <div id="calcPreview" style="background: #f0f0f0; padding: 15px; margin: 15px 0; border: 1px dashed #ccc;">
+                    <strong>EXAMINATION PLAN</strong><br><br>
+                    Final questions required: <span id="prevReq">-</span><br>
+                    Security multiplier: <span id="prevMult">-</span><br>
+                    Candidate questions required: <span id="prevCand">-</span><br>
+                    Questions per setter: <span id="prevQpS">-</span><br>
+                    Setters required: <span id="prevSetters">-</span>
+                </div>
+
+                <button onclick="createExam()">Submit Examination Request</button>
+                <button onclick="cancelCreateExam()" style="background: #fff; color: #000; border: 1px solid #ccc;">Cancel</button>
+            </div>
+            
+            <div id="orgExamDetailsView" class="hidden">
+                <div style="display:flex; justify-content:space-between;">
+                    <button onclick="cancelCreateExam()" style="background: #fff; color: #000; border: 1px solid #ccc; width:auto;">&larr; Back to Dashboard</button>
+                    <button onclick="refreshExamDetails()" style="width:auto; background:#fff; color:#000; border:1px solid #ccc;">Refresh</button>
+                </div>
+                <h3 id="detName" style="margin-top:15px;"></h3>
+                <p><strong>Subject:</strong> <span id="detSubject"></span></p>
+                <p><strong>Status:</strong> <span class="badge" id="detStatus"></span></p>
+                
+                <div style="background: #f0f0f0; padding: 15px; margin: 15px 0;">
+                    <p id="detExplanation"></p>
+                </div>
+
+                <div id="examControls"></div>
+                <div id="examProgress" class="hidden" style="margin-top:20px; padding:15px; border:1px solid #000;">
+                    <h4>EXAMINATION STATUS</h4>
+                    <p>Final questions required: <span id="progFinal">-</span></p>
+                    <p>Candidate questions required: <span id="progCand">-</span></p>
+                    <p>Setters required: <span id="progSettersReq">-</span></p>
+                    <p>Setters claimed: <span id="progSettersAssigned">-</span></p>
+                    <p>Questions submitted: <span id="progQSubmitted">-</span> / <span id="progCand2">-</span></p>
+                    <p>Progress: <span id="progPercent">-</span>%</p>
+                </div>
+                
+                <div id="examSelectionBlock" class="hidden" style="margin-top:20px; padding:15px; border:1px solid #2e7d32; background:#e8f5e9;">
+                    <h4>SELECTION COMPLETE</h4>
+                    <p>Selection Status: <span id="selStatus">-</span></p>
+                    <p>Algorithm: <span id="selAlgo">-</span></p>
+                    <p>Blueprint: <span id="selBlueprint">-</span></p>
+                    <p style="color:#2e7d32;"><strong>READY FOR PAPER GENERATION</strong></p>
+                </div>
+
+                <div id="examPaperBlock" class="hidden" style="margin-top:20px; padding:15px; border:1px solid #c62828; background:#ffebee;">
+                    <h4>FINAL EXAMINATION PAPER</h4>
+                    <p>Status: <strong id="paperStatus"></strong></p>
+                    <p>Paper Integrity: <strong>Verified</strong></p>
+                    <p>Release Time: <span id="paperReleaseTime">-</span></p>
+                    <div id="paperControls"></div>
+                </div>
+            </div>
+        </div>
+
+
+        <div id="setterDashboard" class="hidden">
+            <h2>Setter Dashboard</h2>
+            <p id="setterStatusMsg"></p>
+            
+            <div id="setterAvailableExamsView" style="margin-bottom: 30px; border-bottom: 2px solid #ccc; padding-bottom: 20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3>Available Examinations</h3>
+                    <button style="width:auto; background:#fff; color:#000; border:1px solid #ccc;" onclick="loadAvailableExams()">Refresh Available</button>
+                </div>
+                <div id="availableExamList"></div>
+            </div>
+
+            <div id="setterAssignmentsView">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3>My Assignments</h3>
+                    <button style="width:auto; background:#fff; color:#000; border:1px solid #ccc;" onclick="loadAssignments()">Refresh Assignments</button>
+                </div>
+                <div id="assignmentList"></div>
+            </div>
+
+            <div id="setterSubmissionView" class="hidden">
+                <div style="display:flex; justify-content:space-between;">
+                    <button onclick="cancelSubmission()" style="background: #fff; color: #000; border: 1px solid #ccc; width:auto;">&larr; Back</button>
+                    <button onclick="openSubmission(currentAssignment.id)" style="background: #fff; color: #000; border: 1px solid #ccc; width:auto;">Refresh</button>
+                </div>
+                <h3 style="margin-top:15px;">QUESTION SUBMISSION</h3>
+                <p><strong>Examination:</strong> <span id="subExamName"></span></p>
+                <p><strong>Questions required:</strong> <span id="subReq"></span></p>
+                
+                <div id="submissionFormArea" style="margin-top:20px;">
+                    <div id="dynamicFormsContainer"></div>
+                    <button onclick="submitQuestionsBatch()">Submit All Questions</button>
+                </div>
+                <div id="submissionLockedArea" class="hidden" style="margin-top:20px; padding:20px; background:#e0e0e0;">
+                    <strong>Your submission has been received and locked.</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let token = localStorage.getItem('token');
+    let currentUser = null;
+    let currentAssignment = null;
+    let currentExamId = null;
+
+    async function api(endpoint, method = 'GET', body = null) {
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        const res = await fetch('/api' + endpoint, { method, headers, body: body ? JSON.stringify(body) : null });
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            throw new Error(`Server error (${res.status}): unexpected response format`);
+        }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'API Error');
+        return data;
+    }
+
+    async function apiDownload(path) {
+        const res = await fetch('/api' + path, {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({error: res.statusText}));
+            throw new Error(err.error || 'Download failed');
+        }
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'final_paper.pdf';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }
+
+    async function checkAuth() {
+        if (!token) return showAuth();
+        try {
+            const data = await api('/auth/me');
+            currentUser = data.user;
+            showDashboard();
+        } catch (err) {
+            token = null;
+            localStorage.removeItem('token');
+            showAuth();
+        }
+    }
+
+    function toggleAuthForm() {
+        document.getElementById('loginForm').classList.toggle('hidden');
+        document.getElementById('registerForm').classList.toggle('hidden');
+        document.getElementById('authMessage').innerText = '';
+    }
+
+    function showAuth() {
+        document.getElementById('authView').classList.remove('hidden');
+        document.getElementById('appView').classList.add('hidden');
+    }
+
+    function showDashboard() {
+        document.getElementById('authView').classList.add('hidden');
+        document.getElementById('appView').classList.remove('hidden');
+        document.getElementById('welcomeUser').innerText = `Welcome, ${currentUser.name} (${currentUser.role})`;
+        
+        document.getElementById('adminDashboard').classList.add('hidden');
+        document.getElementById('orgDashboard').classList.add('hidden');
+        document.getElementById('setterDashboard').classList.add('hidden');
+
+        if (currentUser.role === 'ADMIN') {
+            document.getElementById('adminDashboard').classList.remove('hidden');
+            loadSetters();
+            loadAdminExams();
+        } else if (currentUser.role === 'ORG') {
+            document.getElementById('orgDashboard').classList.remove('hidden');
+            cancelCreateExam(); 
+        } else if (currentUser.role === 'SETTER') {
+            document.getElementById('setterDashboard').classList.remove('hidden');
+            document.getElementById('setterStatusMsg').innerText = `Status: ${currentUser.status}`;
+            if (currentUser.status === 'APPROVED') {
+                loadAvailableExams();
+                loadAssignments();
+            }
+        }
+    }
+
+    async function login() {
+        try {
+            const data = await api('/auth/login', 'POST', {
+                email: document.getElementById('loginEmail').value,
+                password: document.getElementById('loginPassword').value
+            });
+            token = data.token;
+            localStorage.setItem('token', token);
+            checkAuth();
+        } catch (err) {
+            document.getElementById('authMessage').innerText = err.message;
+        }
+    }
+
+    async function register() {
+        try {
+            await api('/auth/register', 'POST', {
+                name: document.getElementById('regName').value,
+                email: document.getElementById('regEmail').value,
+                password: document.getElementById('regPassword').value,
+                expertise: document.getElementById('regExpertise').value,
+                role: document.getElementById('regRole').value
+            });
+            alert('Registration successful! Please login.');
+            toggleAuthForm();
+        } catch (err) {
+            document.getElementById('authMessage').innerText = err.message;
+        }
+    }
+
+    async function logout() {
+        if (token) {
+            try { await api('/auth/logout', 'POST'); } catch (e) {}
+        }
+        token = null;
+        currentUser = null;
+        localStorage.removeItem('token');
+        showAuth();
+    }
+
+    
+    async function loadSetters() {
+        try {
+            const setters = await api('/admin/setters');
+            const list = document.getElementById('setterList');
+            list.innerHTML = setters.map(s => `
+                <div class="list-item">
+                    <div>
+                        <strong>${s.name}</strong> (${s.email})<br>
+                        <small>Expertise: ${s.expertise}</small> - <span class="badge">${s.status}</span>
+                    </div>
+                    ${s.status === 'PENDING' ? `
+                    <div style="display:flex; gap: 5px;">
+                        <button style="width:auto; margin:0;" onclick="approveSetter(${s.id})">Approve</button>
+                        <button style="width:auto; margin:0; background:#d32f2f;" onclick="rejectSetter(${s.id})">Reject</button>
+                    </div>` : ''}
+                </div>
+            `).join('');
+        } catch (err) { alert(err.message); }
+    }
+
+    async function approveSetter(id) {
+        try {
+            await api(`/admin/setters/${id}/approve`, 'POST');
+            loadSetters();
+        } catch (err) { alert(err.message); }
+    }
+
+    async function rejectSetter(id) {
+        try {
+            await api(`/admin/setters/${id}/reject`, 'POST');
+            loadSetters();
+        } catch (err) { alert(err.message); }
+    }
+
+    async function loadAdminExams() {
+        try {
+            const exams = await api('/admin/exams');
+            const list = document.getElementById('adminExamList');
+            if (exams.length === 0) {
+                list.innerHTML = '<p>No examinations found.</p>';
+                return;
+            }
+            list.innerHTML = exams.map(e => `
+                <div class="list-item" style="flex-direction:column; align-items:flex-start;">
+                    <div><strong>${e.examination_name}</strong> (${e.subject}) — Organized by <em>${e.organization_name}</em></div>
+                    <div style="font-size:0.9em; margin-top:5px; color:#555;">
+                        ${e.required_question_count} Final Qs | ${e.security_multiplier}× Multiplier | Target: ${e.candidate_question_count} Qs<br>
+                        ${e.questions_per_setter} Qs per Setter | ${e.required_setter_count} Setters Req | Valid Qs: <strong>${e.current_valid_question_count}</strong>
+                    </div>
+                    <div style="margin-top:10px;">
+                        Status: <span class="badge">${e.status}</span> 
+                        | Release: ${e.release_at ? new Date(e.release_at).toLocaleString() : 'N/A'}
+                        | Created: ${new Date(e.created_at).toLocaleString()}
+                        ${e.status === 'DRAFT' ? `<button style="width:auto; margin-top:10px; display:block;" onclick="approveExam(${e.id})">APPROVE</button>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        } catch (err) { alert(err.message); }
+    }
+
+    async function approveExam(id) {
+        try {
+            await api(`/admin/exams/${id}/approve`, 'POST');
+            alert('Examination approved successfully.');
+            loadAdminExams();
+        } catch (err) { alert(err.message); }
+    }
+
+    
+    function showCreateExamForm() {
+        document.getElementById('orgExamListView').classList.add('hidden');
+        document.getElementById('orgExamDetailsView').classList.add('hidden');
+        document.getElementById('orgCreateExamView').classList.remove('hidden');
+        updatePreview();
+    }
+    function cancelCreateExam() {
+        document.getElementById('orgCreateExamView').classList.add('hidden');
+        document.getElementById('orgExamDetailsView').classList.add('hidden');
+        document.getElementById('orgExamListView').classList.remove('hidden');
+        loadExams();
+    }
+
+    function updatePreview() {
+        const reqQ = parseInt(document.getElementById('reqQuestions').value) || 0;
+        let multStr = document.getElementById('multiplier').value;
+        const customMult = document.getElementById('customMultiplier');
+        
+        if (multStr === 'custom') {
+            customMult.classList.remove('hidden');
+            multStr = customMult.value;
+        } else {
+            customMult.classList.add('hidden');
+        }
+        
+        const mult = parseFloat(multStr) || 0;
+        const qPs = parseInt(document.getElementById('qPerSetter').value) || 1;
+        
+        document.getElementById('prevReq').innerText = reqQ;
+        document.getElementById('prevMult').innerText = mult ? (mult + '×') : '-';
+        document.getElementById('prevQpS').innerText = qPs;
+        
+        if (reqQ > 0 && mult >= 1.5 && qPs > 0) {
+            const cand = Math.ceil(reqQ * mult);
+            const setters = Math.ceil(cand / qPs);
+            document.getElementById('prevCand').innerText = cand;
+            document.getElementById('prevSetters').innerText = setters;
+        } else {
+            document.getElementById('prevCand').innerText = '-';
+            document.getElementById('prevSetters').innerText = '-';
+        }
+    }
+
+    async function createExam() {
+        const name = document.getElementById('examName').value;
+        const subject = document.getElementById('examSubject').value;
+        const desc = document.getElementById('examDesc').value;
+        const reqQ = parseInt(document.getElementById('reqQuestions').value);
+        let mult = document.getElementById('multiplier').value;
+        if (mult === 'custom') mult = document.getElementById('customMultiplier').value;
+        const qPs = parseInt(document.getElementById('qPerSetter').value);
+        
+        const releaseAt = document.getElementById('releaseAt').value;
+
+        
+        const bEasy = parseInt(document.getElementById('bEasy').value) || 0;
+        const bMedium = parseInt(document.getElementById('bMedium').value) || 0;
+        const bHard = parseInt(document.getElementById('bHard').value) || 0;
+
+        let blueprint = null;
+        if (bEasy || bMedium || bHard) {
+            blueprint = { difficulty: { Easy: bEasy, Medium: bMedium, Hard: bHard } };
+            const totalBP = bEasy + bMedium + bHard;
+            if (totalBP !== reqQ) {
+                alert(`Blueprint difficulties sum to ${totalBP}, but required final questions is ${reqQ}. They must match.`);
+                return;
+            }
+        }
+
+        try {
+            await api('/exams', 'POST', {
+                examination_name: name,
+                subject: subject,
+                description: desc,
+                required_question_count: reqQ,
+                security_multiplier: mult,
+                questions_per_setter: qPs,
+                blueprint: blueprint,
+                release_at: releaseAt || null
+            });
+            if (!releaseAt) {
+                alert('Examination request created!\n\nNote: No release date was set. The final paper will be downloadable immediately after generation.');
+            } else {
+                alert('Examination request created successfully!');
+            }
+            cancelCreateExam();
+        } catch (err) {
+            alert('Creation failed: ' + err.message);
+        }
+    }
+
+    async function loadExams() {
+        try {
+            const exams = await api('/exams');
+            const list = document.getElementById('examList');
+            if (exams.length === 0) {
+                list.innerHTML = '<p>No examinations yet.</p>';
+                return;
+            }
+            list.innerHTML = exams.map(e => `
+                <div class="list-item" style="flex-direction:column; align-items:flex-start;">
+                    <div><strong>${e.examination_name}</strong> (${e.subject})</div>
+                    <div>${e.required_question_count} final questions | ${e.security_multiplier}× multiplier</div>
+                    <div>${e.candidate_question_count} candidate questions | ${e.required_setter_count} setters</div>
+                    <div>Status: <span class="badge">${e.status}</span></div>
+                    <button style="width:auto; margin-top:10px;" onclick="viewExamDetails(${e.id})">View Details</button>
+                </div>
+            `).join('');
+        } catch (err) { alert(err.message); }
+    }
+
+
+    async function generateSelection(id) {
+        try {
+            const res = await api(`/exams/${id}/select`, 'POST');
+            alert(`Selection successful!\nAlgorithm: ${res.algorithm_version}\nSelected: ${res.selected_count} questions`);
+            viewExamDetails(id);
+        } catch (err) {
+            alert(err.message);
+        }
+    }
+
+    async function generatePaper(id) {
+        try {
+            await api(`/exams/${id}/paper/generate`, 'POST');
+            alert('Final paper generated and securely encrypted.');
+            viewExamDetails(id);
+        } catch (err) {
+            alert(err.message);
+        }
+    }
+
+    async function downloadPaper(id) {
+        try {
+            await apiDownload(`/exams/${id}/paper/download`);
+        } catch (err) {
+            alert(err.message);
+        }
+    }
+
+    function refreshExamDetails() {
+        if (currentExamId) viewExamDetails(currentExamId);
+    }
+
+    async function viewExamDetails(id) {
+        currentExamId = id;
+        try {
+            const exam = await api('/exams/' + id);
+            document.getElementById('orgExamListView').classList.add('hidden');
+            document.getElementById('orgExamDetailsView').classList.remove('hidden');
+            
+            document.getElementById('detName').innerText = exam.examination_name;
+            document.getElementById('detSubject').innerText = exam.subject;
+            document.getElementById('detStatus').innerText = exam.status;
+            
+            document.getElementById('detExplanation').innerText = 
+                `${exam.required_question_count} final questions require a candidate pool of ${exam.candidate_question_count} questions at a ${exam.security_multiplier}× security multiplier. With ${exam.questions_per_setter} questions assigned per setter, ${exam.required_setter_count} approved setters are required.`;
+            
+            const controls = document.getElementById('examControls');
+            const progBlock = document.getElementById('examProgress');
+            const selectionBlock = document.getElementById('examSelectionBlock'); 
+            const paperBlock = document.getElementById('examPaperBlock');
+
+            paperBlock.classList.add('hidden');
+            selectionBlock.classList.add('hidden');
+
+            if (exam.status === 'DRAFT') {
+                controls.innerHTML = `<p>Waiting for Admin approval.</p>`;
+                progBlock.classList.add('hidden');
+            } else {
+                controls.innerHTML = '';
+                progBlock.classList.remove('hidden');
+                
+                const prog = await api(`/exams/${id}/progress`);
+                document.getElementById('progFinal').innerText = prog.exam.required_question_count;
+                document.getElementById('progCand').innerText = prog.exam.candidate_question_count;
+                document.getElementById('progCand2').innerText = prog.exam.candidate_question_count;
+                document.getElementById('progSettersReq').innerText = prog.exam.required_setter_count;
+                document.getElementById('progSettersAssigned').innerText = prog.assigned_setters;
+                document.getElementById('progQSubmitted').innerText = prog.submitted_questions;
+                
+                const pct = Math.floor((prog.submitted_questions / prog.exam.candidate_question_count) * 100);
+                document.getElementById('progPercent').innerText = pct;
+                
+                if (exam.status === 'READY_FOR_SELECTION') {
+                    controls.innerHTML = `<button style="background:green;" onclick="generateSelection(${exam.id})">GENERATE FINAL QUESTIONS</button>`;
+                } else if (exam.status === 'READY_FOR_PAPER_GENERATION') {
+                    selectionBlock.classList.remove('hidden');
+                    controls.innerHTML = `<button style="background:red;" onclick="generatePaper(${exam.id})">GENERATE ENCRYPTED PDF</button>`;
+                    try {
+                        const sel = await api(`/exams/${id}/selection`);
+                        document.getElementById('selStatus').innerText = 'Complete';
+                        document.getElementById('selAlgo').innerText = sel.algorithm_version;
+                        document.getElementById('selBlueprint').innerText = sel.blueprint_status;
+                    } catch(e) {}
+                } else if (exam.status === 'LOCKED') {
+                    paperBlock.classList.remove('hidden');
+                    try {
+                        const paper = await api(`/exams/${id}/paper/status`);
+                        document.getElementById('paperStatus').innerText = paper.status;
+                        document.getElementById('paperReleaseTime').innerText = new Date(paper.release_at).toLocaleString();
+                        document.getElementById('paperControls').innerHTML = `<button style="background:#000;" onclick="downloadPaper(${exam.id})">Download Final Paper</button>`;
+                    } catch(e) {}
+                }
+            }
+        } catch (err) { alert(err.message); }
+    }
+
+    
+    async function loadAvailableExams() {
+        try {
+            const exams = await api('/setter/exams');
+            const list = document.getElementById('availableExamList');
+            if (exams.length === 0) {
+                list.innerHTML = '<p>No available examinations to claim.</p>';
+                return;
+            }
+            list.innerHTML = exams.map(e => `
+                <div class="list-item" style="flex-direction:column; align-items:flex-start; background:#f9f9f9;">
+                    <div><strong>${e.examination_name}</strong> (${e.subject})</div>
+                    <div>Final Questions: ${e.required_question_count} | Questions per Setter: ${e.questions_per_setter}</div>
+                    <div>Required Setters: ${e.required_setter_count} | Remaining Setter Slots: <strong>${e.remaining_slots}</strong></div>
+                    <button style="width:auto; margin-top:10px; background:#1976d2;" onclick="claimExam(${e.id})">CLAIM EXAM</button>
+                </div>
+            `).join('');
+        } catch (err) { alert(err.message); }
+    }
+
+    async function claimExam(id) {
+        try {
+            await api(`/setter/exams/${id}/claim`, 'POST');
+            alert('Examination claimed successfully! You can now submit questions.');
+            loadAvailableExams();
+            loadAssignments();
+        } catch (err) {
+            alert('Claim failed: ' + err.message);
+            loadAvailableExams();
+        }
+    }
+
+    async function loadAssignments() {
+        try {
+            const assignments = await api('/setter/assignments');
+            const list = document.getElementById('assignmentList');
+            if (assignments.length === 0) {
+                list.innerHTML = '<p>No assignments yet.</p>';
+                return;
+            }
+            list.innerHTML = assignments.map(a => `
+                <div class="list-item" style="flex-direction:column; align-items:flex-start;">
+                    <div><strong>${a.examination_name}</strong></div>
+                    <div>${a.questions_submitted} / ${a.questions_required} submitted</div>
+                    <div>Status: <span class="badge">${a.status}</span></div>
+                    <button style="width:auto; margin-top:10px;" onclick="openSubmission(${a.id})">
+                        ${a.status === 'COMPLETED' ? 'View Locked Status' : 'Submit Questions'}
+                    </button>
+                </div>
+            `).join('');
+        } catch (err) { alert(err.message); }
+    }
+
+    function cancelSubmission() {
+        document.getElementById('setterSubmissionView').classList.add('hidden');
+        document.getElementById('setterAssignmentsView').classList.remove('hidden');
+        currentAssignment = null;
+        loadAssignments();
+    }
+
+    async function openSubmission(id) {
+        try {
+            const assignments = await api('/setter/assignments');
+            currentAssignment = assignments.find(a => a.id === id);
+            
+            document.getElementById('setterAssignmentsView').classList.add('hidden');
+            document.getElementById('setterSubmissionView').classList.remove('hidden');
+            
+            document.getElementById('subExamName').innerText = currentAssignment.examination_name;
+            document.getElementById('subReq').innerText = currentAssignment.questions_required;
+            
+            if (currentAssignment.status === 'COMPLETED' || currentAssignment.questions_submitted >= currentAssignment.questions_required) {
+                document.getElementById('submissionFormArea').classList.add('hidden');
+                document.getElementById('submissionLockedArea').classList.remove('hidden');
+            } else {
+                document.getElementById('submissionLockedArea').classList.add('hidden');
+                document.getElementById('submissionFormArea').classList.remove('hidden');
+                
+                const container = document.getElementById('dynamicFormsContainer');
+                let formsHtml = '';
+                for (let i = 0; i < currentAssignment.questions_required; i++) {
+                    formsHtml += `
+                    <div style="border: 1px solid #ccc; padding: 15px; margin-bottom: 20px;" class="question-form-block">
+                        <h4>QUESTION ${i + 1}</h4>
+                        <textarea class="qText" placeholder="Question Text"></textarea>
+                        <input type="text" class="qOptA" placeholder="Option A">
+                        <input type="text" class="qOptB" placeholder="Option B">
+                        <input type="text" class="qOptC" placeholder="Option C">
+                        <input type="text" class="qOptD" placeholder="Option D">
+                        <label>Correct Answer:</label>
+                        <select class="qCorrect">
+                            <option value="A">A</option><option value="B">B</option>
+                            <option value="C">C</option><option value="D">D</option>
+                        </select>
+                        <input type="text" class="qCat" placeholder="Category (Optional)">
+                        <select class="qDiff">
+                            <option value="Easy">Easy</option><option value="Medium">Medium</option><option value="Hard">Hard</option>
+                        </select>
+                    </div>`;
+                }
+                container.innerHTML = formsHtml;
+            }
+        } catch (err) { alert(err.message); }
+    }
+
+    async function submitQuestionsBatch() {
+        const blocks = document.querySelectorAll('.question-form-block');
+        const questions = [];
+        
+        for (let i = 0; i < blocks.length; i++) {
+            const b = blocks[i];
+            questions.push({
+                question_text: b.querySelector('.qText').value,
+                option_a: b.querySelector('.qOptA').value,
+                option_b: b.querySelector('.qOptB').value,
+                option_c: b.querySelector('.qOptC').value,
+                option_d: b.querySelector('.qOptD').value,
+                correct_option: b.querySelector('.qCorrect').value,
+                category: b.querySelector('.qCat').value,
+                difficulty: b.querySelector('.qDiff').value
+            });
+        }
+
+        try {
+            await api(`/setter/assignments/${currentAssignment.id}/questions`, 'POST', { questions });
+            alert('Questions submitted and locked successfully!');
+            openSubmission(currentAssignment.id); 
+        } catch (err) {
+            alert('Submission failed: ' + err.message);
+        }
+    }
+
+    
+    checkAuth();
+</script>
+</body>
+</html>

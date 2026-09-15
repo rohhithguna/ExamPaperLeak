@@ -1,0 +1,379 @@
+===============================================================================
+PROJECT DOCUMENTATION: SECURE EXAMINATION PLATFORM
+===============================================================================
+
+1. PROJECT OVERVIEW
+-------------------------------------------------------------------------------
+The Secure Examination Platform is a web-based system designed to securely manage the entire lifecycle of high-stakes competitive examination question-paper preparation. Conventional examination processes suffer from security leaks, dependence on a few centralized individuals, uncontrolled question sharing, and premature exposure.
+
+This system resolves these vulnerabilities by compartmentalizing the question generation process. It distributes the workload across multiple independent question setters, collects questions into a redundant candidate pool, utilizes a Cryptographically Secure Pseudo-Random Number Generator (CSPRNG) for final selection, and encrypts the final question paper artifact until an exact, pre-configured release time. This prevents any single entity—even the system administrators or the organization itself—from prematurely accessing the final examination paper.
+
+
+2. PROBLEM STATEMENT
+-------------------------------------------------------------------------------
+Conventional competitive examination preparation introduces severe security and operational risks:
+- Dependence on individual setters: Relying on a small group of setters increases the risk of targeted bribery or coercion.
+- Uncontrolled question sharing: Questions are often emailed or shared via insecure channels, leaving digital footprints susceptible to interception.
+- Premature access: Finalized papers are often accessible days before an examination, leading to paper leaks.
+- Insufficient redundancy: If a question is found to be flawed or leaked, there is rarely a secure backup pool immediately available.
+- Question-paper confidentiality: Hardcoded questions are stored in plaintext databases.
+- Integrity: No mechanism exists to cryptographically guarantee that a paper hasn't been tampered with post-generation.
+
+
+3. OBJECTIVES
+-------------------------------------------------------------------------------
+The implemented system achieves the following objectives:
+- Controlled, isolated question collection from distributed setters.
+- Strict role-based access control (Admin, Organization, Question Setter).
+- Redundant candidate question pooling to ensure final selection security.
+- Cryptographically secure, automated final question selection.
+- AES-256-GCM encrypted paper storage ensuring zero plaintext persistence.
+- Cryptographic integrity verification via SHA-256.
+- Strict release-time protection enforced by the server's UTC clock.
+- Comprehensive audit logging of critical security events.
+
+
+4. SYSTEM SCOPE
+-------------------------------------------------------------------------------
+The system handles the digital lifecycle of an examination from initial request through question collection, candidate pooling, random selection, PDF generation, encryption, and time-locked delivery.
+
+It does NOT handle:
+- Student examination taking (this is not an online testing platform).
+- Advanced Institutional Identity Provider (SSO) integration.
+- Distributed horizontal scaling infrastructure directly out-of-the-box (though the PostgreSQL backend natively supports concurrent scale).
+
+
+5. USER ROLES
+-------------------------------------------------------------------------------
+ADMIN:
+- Login: Authenticates via seeded credentials.
+- Permissions: High-level oversight. Cannot view questions or final papers.
+- Actions: Approves or rejects registered Setters and drafted Examination requests.
+- Visible: Examination metadata, global assignment progress, setter lists.
+- Hidden: Actual question text, encrypted artifacts, candidate pools.
+
+ORGANIZATION:
+- Login: Registers and authenticates. Represents the exam board.
+- Permissions: Owns the examination request and configuration.
+- Actions: Creates exams, views submission progress, triggers CSPRNG selection, generates encrypted papers, and downloads the final paper strictly after the release time.
+- Visible: Their own examinations, assignment statistics.
+- Hidden: Examination data belonging to other organizations, setter identities associated with specific questions (blinded).
+
+QUESTION SETTER:
+- Login: Registers and waits for Admin approval before accessing features.
+- Permissions: Strictly limited to claiming assignments and submitting questions.
+- Actions: Claims available exam slots, submits exactly the configured number of questions.
+- Visible: Available approved examinations, their own assignments.
+- Hidden: The global candidate pool, the final paper, examinations they are not assigned to, questions submitted by other setters.
+
+
+6. COMPLETE END-TO-END WORKFLOW
+-------------------------------------------------------------------------------
+1. Organization creates an examination request with specific parameters (e.g., final question count, security multiplier, questions per setter, release time).
+2. The examination enters a DRAFT state.
+3. The Admin reviews the examination request metadata and clicks Approve.
+4. The examination transitions to APPROVED and becomes visible to approved Setters.
+5. Setters view the available examination and voluntarily click "Claim" to acquire an assignment.
+6. The system safely decreases the remaining setter slot count using atomic PostgreSQL transactions to prevent over-claiming.
+7. The claimed Setter receives exactly the configured number of question input fields.
+8. The Setter submits their questions. A deterministic check prevents exact textual duplicates.
+9. Questions enter the candidate pool. Once the required candidate pool target is met, the exam transitions to READY_FOR_SELECTION.
+10. The Organization triggers selection. A CSPRNG (Fisher-Yates shuffle) selects the final questions immutably.
+11. The Organization triggers generation. A PDF is generated in-memory.
+12. The PDF is immediately encrypted using AES-256-GCM, avoiding any persistent plaintext storage.
+13. A SHA-256 integrity hash of the encrypted artifact is generated and stored in the database.
+14. The Organization attempts to download the paper, but is blocked by the server until the pre-configured release time is reached.
+15. At the release time, the Organization downloads the paper. The server verifies the SHA-256 hash, decrypts the AES-256-GCM payload in memory, and delivers the PDF to the authenticated Organization.
+
+
+7. EXAMINATION CONFIGURATION
+-------------------------------------------------------------------------------
+The Organization configures the following during creation:
+- required_question_count: The final number of questions needed.
+- security_multiplier: The redundancy factor (e.g., 1.5x, 2x).
+- questions_per_setter: How many questions each setter must contribute.
+- release_at: The strict UTC time the paper can be downloaded.
+
+Calculation implementation:
+candidate_question_count = ceil(required_question_count * security_multiplier)
+required_setter_count = ceil(candidate_question_count / questions_per_setter)
+
+Realistic Example:
+Final questions = 100
+Security multiplier = 1.5
+Questions per setter = 4
+Candidate pool target = 150
+Required setters = ceil(150 / 4) = 38 setters.
+
+The system uses a larger candidate pool to ensure that the final selection algorithm has sufficient entropy and redundancy to make the final paper unpredictable, even to the setters themselves.
+
+
+8. DYNAMIC QUESTION CONTRIBUTION
+-------------------------------------------------------------------------------
+The `questions_per_setter` is completely dynamic. The system does not hardcode fixed quotas. 
+When an Organization specifies `questions_per_setter = 5`, this integer is stored in PostgreSQL. When a Setter claims the exam, the backend dynamically calculates the assignment requirements. The frontend loop generates exactly 5 question input fields. The backend route (`/setter/assignments/:id/questions`) strictly enforces that the array length of submitted questions exactly matches this dynamic integer before accepting the transaction.
+
+
+9. ADMIN APPROVAL
+-------------------------------------------------------------------------------
+- An Organization submits a POST request to `/exams`. The exam is inserted into PostgreSQL with status 'DRAFT'.
+- The Admin logs into the dashboard, fetching exams via `/admin/exams`.
+- The Admin clicks approve, firing `POST /admin/exams/:id/approve`, updating the status to 'APPROVED'.
+- Only 'APPROVED' or 'COLLECTING' exams are broadcast to setters.
+
+
+10. SETTER CLAIMING
+-------------------------------------------------------------------------------
+Setters view available exams. Upon clicking claim, a strict PostgreSQL atomic transaction is executed:
+`BEGIN`
+-> `SELECT * FROM examinations WHERE id = $1 FOR UPDATE`
+-> Verify no existing assignment for this setter.
+-> Verify current assignment count is less than `required_setter_count`.
+-> `INSERT INTO setter_assignments...`
+-> `COMMIT`
+This prevents race conditions where concurrent setters might exceed the required setter limit.
+
+
+11. QUESTION SUBMISSION
+-------------------------------------------------------------------------------
+Setters submit an array of question objects containing the text, 4 options, the correct option, difficulty, and category.
+- Server validation ensures no missing fields and exact array length matching the setter's quota.
+- Duplicate detection is deterministic: it normalizes whitespace and casing `LOWER(TRIM(REPLACE(question_text, CHR(10), ' ')))` and rejects the batch if any question already exists in the pool.
+- Successful submission updates the assignment status to 'COMPLETED' and inserts the questions atomically.
+
+
+12. CANDIDATE QUESTION POOL
+-------------------------------------------------------------------------------
+The candidate pool exists to provide cryptographic selection entropy. Questions from completed assignments enter this pool with a 'SUBMITTED' status. Once `COUNT(*)` reaches the `candidate_question_count`, the examination is marked 'READY_FOR_SELECTION'.
+
+
+13. FINAL QUESTION SELECTION
+-------------------------------------------------------------------------------
+The system employs `crypto.randomInt` inside a Fisher-Yates shuffle (`secureShuffle`) to randomize the candidate pool. 
+- CSPRNG is required because standard pseudo-random functions (like `Math.random`) are predictable based on seeds.
+- The algorithm shuffles the candidates and selects exactly `required_question_count` questions.
+- This selection is stored as a JSON array in the `final_selections` table and is completely immutable.
+
+
+14. PDF GENERATION
+-------------------------------------------------------------------------------
+The `PaperGenerator` class takes the selected questions and formats them into a MinimalPDF structure in-memory (`Buffer`). This avoids writing intermediate plaintext PDFs to the filesystem, neutralizing local file inclusion or temporary directory leakage threats.
+
+
+15. ENCRYPTION
+-------------------------------------------------------------------------------
+The system uses AES-256-GCM (Galois/Counter Mode) authenticated encryption.
+- A 32-byte (256-bit) encryption key is provided via the `ENCRYPTION_KEY` environment variable.
+- A cryptographically random 12-byte Initialization Vector (IV) is generated per paper.
+- An authentication tag (16 bytes) ensures ciphertext hasn't been modified.
+- The final stored binary artifact concatenates: [12-byte IV] + [16-byte AuthTag] + [Ciphertext].
+Authenticated encryption is used to prevent padding oracle attacks and bit-flipping tampering.
+
+
+16. INTEGRITY
+-------------------------------------------------------------------------------
+Upon generating the encrypted artifact, a SHA-256 hash of the entire binary buffer is generated and stored in the `final_papers` PostgreSQL table. During download, the system reads the artifact from disk, recalculates its SHA-256 hash, and compares it to the database record. If the hashes mismatch, the system throws a tampering alert and blocks decryption.
+
+
+17. RELEASE CONTROL
+-------------------------------------------------------------------------------
+The `release_at` timestamp is enforced strictly by the backend server.
+When an Organization calls `GET /exams/:id/paper/download`, the server compares the current UTC time to `release_at`. If `now < release_at`, a 403 Forbidden response is issued. Once the time passes, the server decrypts and streams the PDF.
+
+
+18. AUTHORIZATION AND SECURITY ISOLATION
+-------------------------------------------------------------------------------
+- Role-based Access: JWT tokens embed the user's role. Middleware (`requireRole`) blocks unauthorized API traversal.
+- Ownership Isolation: All ORG endpoints verify `organization_id = req.user.id`.
+- Parameterized SQL: The `pg` module uses strict `$1, $2` parameterization to prevent SQL injection.
+- IDOR Protection: Setters attempting to view or submit to assignments belonging to other setters are rejected at the database query level.
+
+
+19. AUDIT LOGGING
+-------------------------------------------------------------------------------
+The `audit_log` table tracks critical security events (Event, User ID, Status, Timestamp).
+Implemented events include:
+- REGISTRATION_SUCCESS / FAILURE
+- LOGIN_SUCCESS / FAILURE
+- UNAUTHORIZED_ACCESS_ATTEMPT
+- SETTER_APPROVED / EXAM_APPROVED
+- SETTER_CLAIMED_EXAM
+- QUESTIONS_SUBMITTED_BATCH
+- SELECTION_GENERATED
+- FINAL_PAPER_GENERATED / ENCRYPTED
+- FINAL_PAPER_DOWNLOADED
+- FINAL_PAPER_RELEASE_BLOCKED
+- FINAL_PAPER_INTEGRITY_FAILURE
+
+
+20. DATABASE — POSTGRESQL
+-------------------------------------------------------------------------------
+The system runs on a highly concurrent PostgreSQL database. 
+Important Tables:
+- `users`: id, name, email, password_hash, role, status
+- `examinations`: id, organization_id, examination_name, required_question_count, security_multiplier, candidate_question_count, questions_per_setter, required_setter_count, release_at, status
+- `setter_assignments`: id, examination_id, setter_id, questions_required, questions_submitted, status, completed_at
+- `questions`: id, examination_id, setter_assignment_id, question_text, option_a...d, correct_option
+- `final_selections`: id, examination_id, selected_question_ids, algorithm_version
+- `final_papers`: id, examination_id, artifact_reference, integrity_hash
+- `audit_log`: id, event, user_id, status, timestamp
+
+
+21. TECHNOLOGY STACK
+-------------------------------------------------------------------------------
+- Backend: Node.js, Express, TypeScript
+- Database: PostgreSQL, `pg` driver
+- Frontend: Vanilla HTML, CSS, JavaScript (Single Page Application via `public/index.html`)
+- Cryptography: Node `crypto`, `bcrypt`, `jsonwebtoken`
+
+
+22. PROJECT STRUCTURE
+-------------------------------------------------------------------------------
+project/
+├── src/                  (Backend source code)
+│   ├── auth.ts           (JWT & middleware)
+│   ├── db.ts             (PostgreSQL pool configuration)
+│   ├── index.ts          (Express server entry)
+│   ├── paperGenerator.ts (AES-GCM PDF logic)
+│   ├── routes.ts         (Core API endpoints & transactions)
+│   ├── selector.ts       (CSPRNG selection logic)
+│   └── setupDb.ts        (Schema generation & seed script)
+├── public/
+│   └── index.html        (Frontend Application)
+├── tests/
+│   ├── test_phaseG.js    (E2E Integration Verification)
+│   └── test_dynamic_qps.js (Dynamic constraints testing)
+├── storage/              (AES encrypted artifacts directory)
+├── .env.example          (Environment template)
+├── .gitignore
+├── package.json
+└── tsconfig.json
+
+
+23. API / BACKEND ENDPOINTS
+-------------------------------------------------------------------------------
+- POST /api/auth/login : Authenticates and returns JWT token.
+- POST /api/auth/register : Registers ORG or SETTER.
+- GET /api/admin/exams : [ADMIN] Lists all exams globally.
+- POST /api/admin/exams/:id/approve : [ADMIN] Approves draft exams.
+- POST /api/exams : [ORG] Creates a new examination constraint config.
+- GET /api/exams/:id/progress : [ORG] Views candidate pool status.
+- POST /api/exams/:id/select : [ORG] Triggers CSPRNG selection.
+- POST /api/exams/:id/paper/generate : [ORG] Triggers PDF generation & AES encryption.
+- GET /api/exams/:id/paper/download : [ORG] Validates release time and delivers decrypted PDF.
+- GET /api/setter/exams : [SETTER] Lists available approved exams.
+- POST /api/setter/exams/:id/claim : [SETTER] Executes atomic claim transaction.
+- POST /api/setter/assignments/:id/questions : [SETTER] Submits question batch.
+
+
+24. FRONTEND
+-------------------------------------------------------------------------------
+The frontend (`public/index.html`) is a lightweight SPA.
+- Landing: Displays project context and Demo credentials.
+- Role-based UI: Upon login, the DOM dynamically unhides `adminDashboard`, `orgDashboard`, or `setterDashboard`.
+- Form Validation: Prevents submission of incomplete arrays matching dynamic lengths.
+
+
+25. AUTHENTICATION
+-------------------------------------------------------------------------------
+- Password Hashing: `bcrypt` with 10 salt rounds.
+- Tokens: `jsonwebtoken` (JWT) signed using `JWT_SECRET`. Tokens expire in 24h.
+- Storage: Tokens are passed via `Authorization: Bearer <token>`.
+
+
+26. DEMO ACCOUNTS
+-------------------------------------------------------------------------------
+Intentionally created accounts for demonstration (Using password: demo_password_2026)
+- Admin: admin@gmail.com
+- Organization: organization@gmail.com
+- Setters: setter1@gmail.com through setter5@gmail.com
+These accounts are automatically provisioned via `npm run db:setup`.
+
+
+27. TESTING
+-------------------------------------------------------------------------------
+The definitive test suite is `test_phaseG.js`.
+It programmatically verifies:
+- Registration and Admin authorization flow.
+- Exact setter allocation and concurrent claim rejection when full.
+- Backend rejection of insufficient or excessive question payloads.
+- CSPRNG selection success and immutability lock (rejecting regenerations).
+- AES-256-GCM encryption verification (checking storage directory for ciphertext only).
+- Release-time rejection (expecting 403 before time).
+- Successful decryption and delivery post-release.
+- Intentional tampering detection (flipping a ciphertext byte and expecting a 500 error).
+
+The dynamic test suite `test_dynamic_qps.js` iterates through tests for 2, 3, 4, and 5 questions-per-setter constraints to ensure total dynamic calculation stability.
+
+
+28. SECURITY TESTING OVERVIEW
+-------------------------------------------------------------------------------
+Threat                           | Control                                | Verification
+---------------------------------------------------------------------------------------------
+Concurrent over-claiming         | PostgreSQL SELECT FOR UPDATE locking   | test_phaseG.js
+Predictable final selection      | Fisher-Yates CSPRNG                    | test_phaseG.js
+Storage plaintext theft          | AES-256-GCM in-memory encryption       | test_phaseG.js
+Paper tampering                  | SHA-256 + AES-GCM AuthTag              | test_phaseG.js
+Early organization access        | Server UTC `release_at` enforcement    | test_phaseG.js
+Unauthorized assignment access   | Route parameter ownership validation   | test_phaseG.js
+
+
+29. DEPLOYMENT
+-------------------------------------------------------------------------------
+Intended architecture for AWS:
+- Application Tier: Node.js + Express hosted on AWS EC2 or Elastic Beanstalk.
+- Database Tier: Amazon RDS (PostgreSQL) ensuring transactional integrity.
+- Storage Tier: Amazon EBS or S3 (with backend proxy) storing `.enc` artifacts.
+Configuration is cleanly managed via `.env` files.
+
+
+30. ENVIRONMENT VARIABLES
+-------------------------------------------------------------------------------
+- DATABASE_URL: PostgreSQL connection string (e.g. postgresql://user:pass@host/db).
+- ENCRYPTION_KEY: 64-character hex string representing a 256-bit symmetric key for AES-GCM.
+- JWT_SECRET: Strong secret string used to sign session tokens.
+- PORT: Express listener port.
+
+
+31. INSTALLATION AND LOCAL SETUP
+-------------------------------------------------------------------------------
+1. Clone the repository.
+2. Ensure PostgreSQL is installed and running.
+3. `cp .env.example .env` and update the `DATABASE_URL`, `JWT_SECRET`, and `ENCRYPTION_KEY`.
+4. Run `npm install`.
+5. Run `npm run db:setup` to construct the schema and demo accounts.
+6. Run `npm run dev` to start the backend server on port 3000.
+7. Open `http://localhost:3000` in your browser.
+
+
+32. GITHUB SETUP
+-------------------------------------------------------------------------------
+When publishing to GitHub:
+- Do NOT commit `.env`.
+- Do NOT commit the contents of `storage/` (generated encrypted papers).
+- Do NOT commit `node_modules/` or `dist/`.
+- Ensure `.gitignore` is active.
+
+
+33. LIMITATIONS
+-------------------------------------------------------------------------------
+- Duplicate Detection: The system relies on deterministic string normalization. It cannot detect semantically similar questions (e.g., "What is the capital of France?" vs "Name the capital of France").
+- Key Management: The `ENCRYPTION_KEY` is loaded from `.env`. The system currently lacks integration with advanced KMS (Key Management Service) providers for automated key rotation.
+- Storage: Artifacts are written to the local `/storage` directory. For a truly distributed multi-server architecture, this should be abstracted to S3.
+
+
+34. FUTURE ENHANCEMENTS
+-------------------------------------------------------------------------------
+- AWS KMS Integration: To manage the AES keys externally.
+- NLP Similarity Detection: Integrate an AI or Levenshtein distance algorithm for semantic duplicate detection.
+- Distributed Object Storage: Replace local `fs.writeFileSync` with an S3 adapter.
+- Advanced Monitoring: Integrate Prometheus/Grafana for operational metrics.
+
+
+35. CONCLUSION
+-------------------------------------------------------------------------------
+The Secure Examination Platform successfully demonstrates the application of cryptographic primitives (CSPRNG, AES-256-GCM, SHA-256) and strict database transactional isolation to solve a real-world academic security problem. By distributing the question contribution phase, enforcing dynamic redundancy, and completely masking the final paper through encryption and time-locks, the system achieves a verifiable, leak-resistant examination generation pipeline.
+
+===============================================================================
+END OF DOCUMENTATION
+===============================================================================
