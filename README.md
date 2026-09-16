@@ -405,8 +405,351 @@ To deploy:
 2. Deploy the Express application to AWS Elastic Beanstalk or EC2.
 3. Pass all `.env` requirements (`DATABASE_URL`, `ENCRYPTION_KEY`, `JWT_SECRET`) directly into the secure AWS environment variables console.
 
----
+## 21.0 AWS CLOUD DEPLOYMENT
 
+The Secure Management of Competitive Examination Question Papers platform has been deployed on Amazon Web Services (AWS) using a cloud-based architecture consisting of an Amazon EC2 application server and a private Amazon RDS PostgreSQL database.
+
+The AWS deployment preserves the same application architecture and security mechanisms implemented in the local version. No changes were made to the core examination workflow.
+
+### 21.1 Live Application
+
+The deployed application is accessible at:
+
+Live Application: http://13.51.178.204:3000
+
+GitHub Repository:
+https://github.com/rohhithguna/ExamPaperLeak
+
+The application is currently accessible through the EC2 public IP address. HTTPS and a domain name can be added as a future deployment enhancement using Nginx and SSL/TLS.
+
+### 21.2 AWS Deployment Architecture
+
+The deployed architecture follows a two-tier model:
+
+Internet
+   |
+   v
+Amazon EC2
+(exampaper-server)
+   |
+   | PostgreSQL over SSL/TLS
+   v
+Amazon RDS
+(exampaper-db)
+   |
+   v
+PostgreSQL Database
+(exampaper)
+
+The EC2 instance hosts the Node.js/Express application, while Amazon RDS provides the PostgreSQL database service.
+
+The RDS instance is not publicly accessible. Database access is restricted through AWS Security Groups.
+
+### 21.3 AWS Region
+
+The complete deployment was created in the AWS Europe (Stockholm) region.
+
+AWS Region:
+eu-north-1
+
+This region contains both the EC2 application server and the RDS PostgreSQL database.
+
+### 21.4 Amazon EC2 Application Server
+
+The application is hosted on an Amazon EC2 instance with the following configuration:
+
+Instance Name:
+exampaper-server
+
+Operating System:
+Amazon Linux 2023
+
+Node.js Version:
+Node.js 22
+
+Application Framework:
+Node.js + Express + TypeScript
+
+Application Directory:
+~/ExamPaperLeak
+
+The project repository was cloned from GitHub onto the EC2 server.
+
+Application setup commands used:
+
+    git clone https://github.com/rohhithguna/ExamPaperLeak.git
+    cd ExamPaperLeak
+    npm ci
+    npm run build
+
+The TypeScript source code is compiled into the `dist/` directory.
+
+The application is started using:
+
+    node dist/index.js
+
+The compiled application entry point is:
+
+    dist/index.js
+
+### 21.5 Amazon RDS PostgreSQL Database
+
+The application database is hosted using Amazon RDS.
+
+RDS Instance Identifier:
+exampaper-db
+
+Database Name:
+exampaper
+
+Database Engine:
+PostgreSQL
+
+Database Port:
+5432
+
+RDS Public Accessibility:
+No
+
+RDS Endpoint:
+
+    exampaper-db.clke4s8g6im9.eu-north-1.rds.amazonaws.com
+
+The database is hosted privately and is not directly exposed to the public internet.
+
+The application running on EC2 communicates with RDS using PostgreSQL over a secured connection.
+
+### 21.6 AWS Security Groups
+
+Two AWS Security Groups are used to control network access.
+
+EC2 Security Group:
+launch-wizard-1
+
+RDS Security Group:
+exampaper-rds-sg
+
+The EC2 instance allows application traffic on TCP port 3000 for the currently deployed HTTP application.
+
+The RDS security group allows PostgreSQL traffic on TCP port 5432 from the EC2 security group.
+
+Therefore, the database is not opened to unrestricted internet access.
+
+Network flow:
+
+    Internet
+       |
+       | TCP 3000
+       v
+    EC2 Server
+       |
+       | TCP 5432
+       | SSL/TLS
+       v
+    RDS PostgreSQL
+
+### 21.7 Secure PostgreSQL Connection
+
+The Node.js application connects to Amazon RDS using the PostgreSQL connection string stored in the environment configuration.
+
+The application uses SSL/TLS for the PostgreSQL connection.
+
+The database connection configuration includes:
+
+    ssl: {
+      rejectUnauthorized: false
+    }
+
+The connection uses the following environment variable:
+
+    DATABASE_URL=postgresql://username:password@hostname:5432/exampaper
+
+The database connection was tested successfully from the EC2 instance.
+
+TCP connectivity to PostgreSQL was verified on port 5432.
+
+The RDS connection was also verified using PostgreSQL client tools with SSL enabled.
+
+The successful database connection used TLS 1.3 with the TLS_AES_256_GCM_SHA384 cipher.
+
+### 21.8 Environment Variables and Secret Management
+
+Sensitive configuration values are stored in the EC2 server's `.env` file.
+
+The application uses the following environment variables:
+
+    PORT=3000
+    DATABASE_URL=postgresql://username:password@hostname:5432/exampaper
+    ENCRYPTION_KEY=your_64_character_hex_key_here
+    JWT_SECRET=your_jwt_secret_here
+
+The `.env` file is excluded from Git using `.gitignore`.
+
+Only `.env.example` is committed to the repository as a configuration template.
+
+Sensitive values such as:
+
+- PostgreSQL credentials
+- AES-256-GCM encryption key
+- JWT secret
+
+are not stored in the GitHub repository.
+
+### 21.9 Database Initialization
+
+After establishing the RDS connection, the PostgreSQL database schema was initialized using the project's database setup script.
+
+The following command was executed on EC2:
+
+    npm run db:setup
+
+The database initialization completed successfully.
+
+The following tables were created:
+
+- users
+- examinations
+- setter_assignments
+- questions
+- final_selections
+- final_papers
+- audit_log
+
+Demo accounts were also seeded during database initialization for development and demonstration purposes.
+
+The database was verified directly through PostgreSQL after setup.
+
+### 21.10 Permanent Application Service
+
+To ensure that the application continues running after the EC2 terminal session is closed or the server is restarted, a Linux systemd service was configured.
+
+Service Name:
+
+    exampaper.service
+
+The service configuration uses:
+
+    [Unit]
+    Description=Secure Exam Paper Platform
+    After=network.target
+
+    [Service]
+    Type=simple
+    User=ec2-user
+    WorkingDirectory=/home/ec2-user/ExamPaperLeak
+    ExecStart=/usr/bin/node /home/ec2-user/ExamPaperLeak/dist/index.js
+    Restart=always
+    RestartSec=5
+    Environment=NODE_ENV=production
+
+    [Install]
+    WantedBy=multi-user.target
+
+The service was enabled using:
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable exampaper
+    sudo systemctl start exampaper
+
+The service status was verified successfully:
+
+    sudo systemctl status exampaper
+
+The application service is currently active and running.
+
+### 21.11 External Application Verification
+
+After configuring the EC2 Security Group, the application was tested from outside the EC2 instance.
+
+The following endpoint was tested:
+
+    http://13.51.178.204:3000
+
+The server returned:
+
+    HTTP/1.1 200 OK
+
+The Secure Exam Platform login/application page was successfully loaded through a web browser.
+
+This confirmed the complete basic deployment path:
+
+    Browser
+       |
+       v
+    EC2 Public IP
+       |
+       v
+    Node.js + Express
+       |
+       v
+    PostgreSQL RDS
+
+### 21.12 AWS Deployment Mapping to Project Components
+
+The major project components are mapped to the AWS infrastructure as follows:
+
+| Project Component | AWS Deployment Location |
+|---|---|
+| Frontend | Served by Node.js/Express on EC2 |
+| Express Backend | Amazon EC2 |
+| Authentication | EC2 application server |
+| JWT Authentication | EC2 application server |
+| Examination Management | EC2 application server |
+| Setter Assignment | EC2 application server |
+| Question Collection | EC2 application server |
+| CSPRNG Selection | EC2 application server |
+| PDF Generation | EC2 application server |
+| AES-256-GCM Encryption | EC2 application server |
+| SHA-256 Integrity Hashing | EC2 application server |
+| PostgreSQL Database | Amazon RDS |
+| Database Tables | Amazon RDS PostgreSQL |
+| Encrypted Paper Artifacts | EC2 `storage/` directory |
+| Environment Secrets | EC2 `.env` file |
+| Application Process Management | Linux systemd |
+| Network Access Control | AWS Security Groups |
+
+The core application logic remains unchanged from the locally tested implementation. AWS provides the cloud infrastructure required to host the application and database.
+
+### 21.13 Current AWS Deployment Status
+
+The following deployment components have been successfully completed and verified:
+
+| Component | Status |
+|---|---|
+| AWS Region Configuration | Completed |
+| EC2 Instance Creation | Completed |
+| Amazon Linux 2023 Setup | Completed |
+| Node.js 22 Installation | Completed |
+| Git Repository Deployment | Completed |
+| npm Dependency Installation | Completed |
+| TypeScript Build | Completed |
+| Amazon RDS PostgreSQL Creation | Completed |
+| PostgreSQL Database Creation | Completed |
+| EC2 → RDS Connectivity | Verified |
+| PostgreSQL SSL/TLS Connection | Verified |
+| Database Schema Initialization | Completed |
+| Demo Account Seeding | Completed |
+| AWS Security Group Configuration | Completed |
+| Express Application Deployment | Completed |
+| External HTTP Access | Verified |
+| systemd Service Configuration | Completed |
+| Automatic Service Restart | Configured |
+| Live Application Access | Verified |
+
+The application is currently deployed and accessible through the EC2 public IP address.
+
+Future infrastructure enhancements may include:
+
+- Nginx reverse proxy
+- HTTPS using SSL/TLS certificates
+- Custom domain name
+- AWS Route 53
+- Amazon S3 for encrypted paper artifact storage
+- AWS KMS for managed key protection
+- CloudWatch monitoring and logging
+- Automated CI/CD deployment using GitHub Actions
+
+These enhancements are optional extensions and are not required for the core examination question-paper security workflow implemented in the project.
 ## 22. LICENSE
 
 This project is licensed under the **ISC License**.
