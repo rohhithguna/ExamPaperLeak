@@ -17,3 +17,9 @@ dist/
 macOS metadata
 
 .DS_Store
+printf "\n# Local demo video\ncloud_project_demo.mov\n\n# AWS private key\n*.pem\n" >> .gitignore
+# Local demo video
+cloud_project_demo.mov
+
+# AWS private key
+*.pem
