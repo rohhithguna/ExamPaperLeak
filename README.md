@@ -1,6 +1,16 @@
 # SECURE MANAGEMENT OF COMPETITIVE EXAMINATION QUESTION PAPERS
 **A Cryptographically Secure, Distributed Framework for High-Stakes Examination Generation**
 
+The deployed application is accessible at:
+
+Project demo video : https://drive.google.com/file/d/1ZQEgNJ70Wk_v9rmuul7Tydyyrkzs27xB/view?usp=sharing
+
+AWS Live Application: http://13.51.178.204:3000
+
+GitHub Repository:
+https://github.com/rohhithguna/ExamPaperLeak
+
+The application is currently accessible through the EC2 public IP address. HTTPS and a domain name can be added as a future deployment enhancement using Nginx and SSL/TLS.
 ---
 
 ## 1. PROJECT OVERVIEW
